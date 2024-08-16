@@ -55,8 +55,7 @@ contract GMXLensV2 is MarketDataTypes, Initializable, UUPSUpgradeable, OwnableUp
 
     address immutable _owner;
 
-    function initialize() public initializer  {
-        __Ownable_init(msg.sender);
+    constructor() {
         orderStoreAddr = 0x97BeB5A20FBd4596c8B19a89Ec399a100e57d14d;
         depositStoreAddr = 0x98e86155abf8bCbA566b4a909be8cF4e3F227FAf;
         marketStoreAddr = 0x5a1344252f0CdfDB765DD5ab97C98734f1D7ED6d;
@@ -64,26 +63,27 @@ contract GMXLensV2 is MarketDataTypes, Initializable, UUPSUpgradeable, OwnableUp
         readerAddr = 0xdA5A70c885187DaA71E7553ca9F728464af8d2ad;
         dataStoreAddr = 0xFD70de6b91282D8017aA4E741e9Ae325CAb992d8;
         oracleAddr = 0xa11B501c2dd83Acd29F6727570f2502FAaa617F2;
+
+        reader = IReader(readerAddr);
+
+        _disableInitializers();
+    }   
+
+    function initialize() public initializer  {
+        __Ownable_init(msg.sender);
+
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-    function getMarketData(address marketID, address _vault) external view returns (MarketDataState memory) {
-        // Interface for the GMX Market Data contract
-        IMarketStoreUtils marketStoreUtils = IMarketStoreUtils(marketStoreAddr);
-
-        // Fetching data from the market data contract
-        address indexTokenAddress = address(uint160(uint256(marketStoreUtils.INDEX_TOKEN())));
-
-        address longTokenAddress = address(uint160(uint256(marketStoreUtils.LONG_TOKEN())));
-        
-        address shortTokenAddress = address(uint160(uint256(marketStoreUtils.SHORT_TOKEN())));
-        
+    function getMarketData(address marketID) external view returns (MarketDataState memory) {
         // bytes32 borrowingFactor = positionStoreUtils.BORROWING_FACTOR();
         // address borrowingFactorAddress = address(uint160(uint256(borrowingFactor)));
+        IDataStore(dataStoreAddr).getUint(Keys.MAX_PNL_FACTOR_FOR_TRADERS);
 
-        Market.Props memory marketProps = reader.getMarket(dataStoreAddr, marketID);
-        Price.MarketPrices memory marketPrices = Price.MarketPrices(getTokenPrice(indexTokenAddress), getTokenPrice(longTokenAddress), getTokenPrice(shortTokenAddress));
+        Market.Props memory marketProps = reader.getMarket(dataStoreAddr, 0x2b477989A149B17073D9C9C82eC9cB03591e20c6);
+                        
+        Price.MarketPrices memory marketPrices = Price.MarketPrices(getTokenPrice(marketProps.indexToken), getTokenPrice(marketProps.longToken), getTokenPrice(marketProps.shortToken));
 
         (,MarketPoolValueInfo.Props memory marketPoolValueInfo) = reader
             .getMarketTokenPrice(
@@ -95,12 +95,14 @@ contract GMXLensV2 is MarketDataTypes, Initializable, UUPSUpgradeable, OwnableUp
                 Keys.MAX_PNL_FACTOR_FOR_TRADERS,
                 true
             );
+        
+        
         {
             MarketDataState memory state = MarketDataState({
                 marketToken: marketID,
-                indexToken: indexTokenAddress,
-                longToken: longTokenAddress,
-                shortToken: shortTokenAddress,
+                indexToken: marketProps.indexToken,
+                longToken: marketProps.longToken,
+                shortToken: marketProps.shortToken,
                 poolValue: marketPoolValueInfo.poolValue,
                 longTokenAmount: marketPoolValueInfo.longTokenAmount,
                 longTokenUsd: marketPoolValueInfo.longTokenUsd,
